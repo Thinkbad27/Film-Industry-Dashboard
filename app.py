@@ -404,6 +404,8 @@ def charts(year_range):
 
     return treemap_fig, donut_fig
 
+server = app.server
+
 # Run the Dash app
 if __name__ == '__main__':
     app.run_server(debug=True)
