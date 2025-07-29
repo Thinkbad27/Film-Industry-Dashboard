@@ -1,0 +1,10 @@
+#!/bin/sh
+'''exec' "/Users/tianyue/Desktop/2024/S2/QBUS5010/Assignment/Assignment 2/QBUS5010_REPORT_GROUP_057/dash_env/bin/python3" "$0" "$@"
+' '''
+# -*- coding: utf-8 -*-
+import re
+import sys
+from dash.development.build_process import renderer
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(renderer())
