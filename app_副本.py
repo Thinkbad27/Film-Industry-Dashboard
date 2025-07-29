@@ -8,22 +8,25 @@ import plotly.graph_objects as go
 import ast
 import dash_bootstrap_components as dbc
 
-# --- Data Loading and Preprocessing ---
 df = pd.read_csv('df_cleaned.csv')
+
 df_geo_cleaned = pd.read_csv('cleaned_geomap.csv')
+
 df_trend = pd.read_csv('multiTimeline.csv')
 
 # Extracting relevant columns for analysis
-# FIX: Addressing SettingWithCopyWarning by explicitly creating a copy
-actor_revenue_df = df[['cast', 'revenue']].copy() # <--- Added .copy() here
-
+actor_revenue_df = df[['cast', 'revenue']]
+historical_top_8 = df.sort_values(by='revenue', ascending=False).head(8)
 # Define a function to extract actor names and create a new column
+import ast
+
 def get_main_actors(cast_data):
+    # Parse the JSON-like string to extract main actors (top 3)
     try:
         cast_list = ast.literal_eval(cast_data)
         main_actors = [member['name'] for member in cast_list[:3]]
         return main_actors
-    except (ValueError, SyntaxError): # Added more specific exceptions for robustness
+    except:
         return []
 
 # Create a new column for main actors
@@ -37,7 +40,6 @@ actor_cumulative_revenue = actor_revenue_exploded.groupby('main_actors')['revenu
 
 # Sort actors by cumulative revenue and select the top 8
 top_8_actors = actor_cumulative_revenue.sort_values(by='revenue', ascending=False).head(8)
-
 # Process the data based on your previous filtering and processing logic
 df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
 
@@ -69,9 +71,8 @@ def format_vote_count(vote_count):
     return str(vote_count)
 
 # Process the genres and production countries, and extract relevant data
-df['genres_list'] = df['genres'].apply(lambda x: [genre['name'] for genre in ast.literal_eval(x)] if pd.notna(x) else [])
-df['countries_list'] = df['production_countries'].apply(lambda x: [country['name'] for country in ast.literal_eval(x)] if pd.notna(x) else [])
-
+df['genres_list'] = df['genres'].apply(lambda x: [genre['name'] for genre in ast.literal_eval(x)])
+df['countries_list'] = df['production_countries'].apply(lambda x: [country['name'] for country in ast.literal_eval(x)])
 
 # Extract release year & drop rows with missing values
 df['release_year'] = pd.to_datetime(df['release_date'], errors='coerce').dt.year
@@ -81,13 +82,15 @@ df = df.dropna(subset=['release_year'])
 df_exploded_genres = df.explode('genres_list')
 df_exploded_countries = df.explode('countries_list')
 
-# --- Dash App Initialization ---
+
+
+
+# Initialize Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SUPERHERO])
 
-custom_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+custom_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
                  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
-# --- Dash App Layout ---
 app.layout = html.Div([
     # Navigation Bar
     html.Div([
@@ -104,17 +107,9 @@ app.layout = html.Div([
         ], style={'text-align': 'center', 'background-color': 'rgba(0, 0, 0, 0)'}),
     ], style={'padding': '10px', 'border-radius': '5px'}),
 
-    # Main Content - Using dcc.Location for multi-page routing
-    dcc.Location(id='url', refresh=False),
-    html.Div(id='page-content') # Content will be loaded here based on URL
-])
-
-# Define the content for each page (simplified for example)
-home_page_layout = html.Div([
-    html.H1("Welcome to the Film Industry Analysis Dashboard"),
-    html.P("Use the navigation bar to explore different aspects of the film industry."),
+    # Main Content
     html.Div([
-        # First Row: 1st Column with 2 Plots (from original app.layout)
+        # First Row: 1st Column with 2 Plots
         html.Div([
             html.H3("Movie Revenue"),
             dcc.RadioItems(
@@ -126,8 +121,8 @@ home_page_layout = html.Div([
                 ],
                 value='on_screen',
                 labelStyle={'display': 'inline-block'}
-            ),
-            dcc.Graph(id='bar-chart', style={'height': '400px', 'width': '80%'}),
+            ), 
+            dcc.Graph(id='bar-chart', style={'height': '400px', 'width': '80%'}),  # Adjusted size
 
             # Second section: Movie Ratings Table
             html.H3("Real-time Film Score"),
@@ -147,12 +142,12 @@ home_page_layout = html.Div([
                     ]) for _, row in movies.iterrows()
                 ])
             ])
-        ], style={'flex': '1', 'padding': '10px'}),
+        ], style={'flex': '1', 'padding': '10px'}), 
 
-        # Second Column: 2nd Column with 2 Plots (from original app.layout)
+        # Second Column: 2nd Column with 2 Plots
         html.Div([
             html.H3("Movie Popularity"),
-
+    
             # Dropdown for Time Series Plot
             html.Div([
                 html.Label("Select Movies for Time Series:"),
@@ -161,11 +156,11 @@ home_page_layout = html.Div([
                     options=[{'label': col, 'value': col} for col in df_trend.columns[1:]],
                     value=[df_trend.columns[1], df_trend.columns[2]],
                     multi=True,
-                    style={'color': 'black'}
+                    style={'color': 'black'} 
                 ),
             ]),
-            dcc.Graph(id='time-series-plot', style={'height': '400px', 'width': '100%'}),
-
+            dcc.Graph(id='time-series-plot', style={'height': '400px', 'width': '100%'}),  # Adjusted size
+            
             # Dropdown for Geo Map Plot
             html.Div([
                 html.Label("Select Movie for Geo Map:"),
@@ -177,19 +172,19 @@ home_page_layout = html.Div([
                     style={'color': 'black'}
                 ),
             ]),
-            dcc.Graph(id='geo-map', style={'height': '400px', 'width': '100%'}),
+            dcc.Graph(id='geo-map', style={'height': '400px', 'width': '100%'}),  # Adjusted size
         ], style={'flex': '1', 'padding': '10px'}),
 
-        # Third Column: 3rd Column with 2 Plots (from original app.layout)
+        # Third Column: 3rd Column with 2 Plots
         html.Div([
             html.H3("Film Industry Analysis"),
-
+    
             # Treemap for movie genres
-            dcc.Graph(id='treemap-graph', style={'height': '400px', 'width': '100%'}),
-
+            dcc.Graph(id='treemap-graph', style={'height': '400px', 'width': '100%'}),  # Adjusted size
+                
             # Donut chart for production countries
-            dcc.Graph(id='donut-chart', style={'height': '500px', 'width': '100%'}),
-
+            dcc.Graph(id='donut-chart', style={'height': '500px', 'width': '100%'}),  # Adjusted size
+                
             # Slider to select the year range
             dcc.RangeSlider(
                 int(df['release_year'].min()),
@@ -200,27 +195,9 @@ home_page_layout = html.Div([
                 id='year-slider'
             )
         ], style={'flex': '1', 'padding': '10px'}),
-    ], style={'display': 'flex', 'flex-direction': 'row'})
+    ], style={'display': 'flex', 'flex-direction': 'row'}),
 ])
 
-# --- Callbacks ---
-
-# Callback for multi-page routing
-@app.callback(Output('page-content', 'children'),
-              [Input('url', 'pathname')])
-def display_page(pathname):
-    if pathname == '/boxoffice':
-        return html.Div("Box Office Content - TODO: Implement specific layout for Box Office")
-    elif pathname == '/score':
-        return html.Div("Score Content - TODO: Implement specific layout for Score")
-    elif pathname == '/popularity':
-        return html.Div("Popularity Content - TODO: Implement specific layout for Popularity")
-    elif pathname == '/genre':
-        return html.Div("Genre Content - TODO: Implement specific layout for Genre")
-    elif pathname == '/language':
-        return html.Div("Language Content - TODO: Implement specific layout for Language")
-    else: # Default to home page or main dashboard
-        return home_page_layout
 
 # Define callback function to update bar chart based on selected filter
 @app.callback(
@@ -235,13 +212,10 @@ def update_graph(selected_filter):
         title = 'Top 8 Movies (On Screen - 2016/06/01 to 2016/09/30)'
         width, height = 900, 400  # Set size for on-screen chart
         left_margin = 180
-
+        
         # Create the bar chart
-        fig = px.bar(data, x='revenue', y='title', orientation='h', title=title) # Changed y='title_x' to 'title' as per line 69
-        # Changed y='title_x' to 'title' as per line 69
-        # Also ensure 'title' is the correct column name for plotting
-        # based on movies.columns = ['title', 'vote_average', 'vote_count']
-
+        fig = px.bar(data, x='revenue', y='title_x', orientation='h', title=title)
+        
     elif selected_filter == 'historical':
         # Sort for historical top 8 movies by revenue
         data = historical_top_8.sort_values(by='revenue', ascending=False)
@@ -250,7 +224,7 @@ def update_graph(selected_filter):
         left_margin = 160
 
         fig = px.bar(data, x='revenue', y='title_x', orientation='h', title=title)
-
+        
     else:
         # Sort actors by cumulative revenue
         data = top_8_actors.sort_values(by='revenue', ascending=False)
@@ -268,17 +242,17 @@ def update_graph(selected_filter):
     # Apply common layout settings
     fig.update_layout(
         title_x=0,  # Left-align title
-        xaxis_title="Revenue",
+        xaxis_title="Revenue", 
         yaxis_title="",
         yaxis_tickfont=dict(size=14),
         yaxis_ticklabelposition="outside",
         yaxis_tickangle=0,
-        margin=dict(l=left_margin, r=50, t=80, b=50),
-        width=width,
-        height=height,
+        margin=dict(l=left_margin, r=50, t=80, b=50), 
+        width=width,  
+        height=height,  
         yaxis={'categoryorder':'total ascending', 'automargin': True}
     )
-
+    
     # Adjust bar chart visuals
     fig.update_traces(marker_color='rgba(0, 0, 139, 0.7)', marker_line_width=1.5, width=0.5)  # Dark blue color
 
@@ -296,13 +270,13 @@ def update_time_series(selected_movies):
 
     # Time Series Plot
     try:
-        df_melted_trend = df_trend.melt(id_vars='Months', value_vars=selected_movies,
+        df_melted_trend = df_trend.melt(id_vars='Months', value_vars=selected_movies, 
                                          var_name='Movie', value_name='Popularity')
         time_series_fig = px.line(
-            df_melted_trend,
-            x='Months',
-            y='Popularity',
-            color='Movie',
+            df_melted_trend, 
+            x='Months', 
+            y='Popularity', 
+            color='Movie', 
             title='Movie Popularity Over Time',
             labels={'Months': 'Months', 'Popularity': 'Popularity Index'}
         )
@@ -328,8 +302,8 @@ def update_time_series(selected_movies):
 def update_geo_map(selected_movie):
     # Geo Map Plot
     try:
-        df_melted_geo = df_geo_cleaned.melt(id_vars='Countries', value_vars=[selected_movie],
-                                            var_name='Movie', value_name='Popularity')
+        df_melted_geo = df_geo_cleaned.melt(id_vars='Countries', value_vars=[selected_movie], 
+                                             var_name='Movie', value_name='Popularity')
 
         geo_map_fig = px.choropleth(
             df_melted_geo,
@@ -343,8 +317,8 @@ def update_geo_map(selected_movie):
 
         # Update layout for the geo map
         geo_map_fig.update_geos(
-            showland=True,
-            landcolor='lightgray',
+            showland=True, 
+            landcolor='lightgray', 
             showcoastlines=True,
             coastlinecolor='black',
         )
@@ -366,11 +340,11 @@ def update_geo_map(selected_movie):
 )
 def charts(year_range):
     # Filter the dataframe
-    filtered_df_genres = df_exploded_genres[(df_exploded_genres['release_year'] >= year_range[0]) &
+    filtered_df_genres = df_exploded_genres[(df_exploded_genres['release_year'] >= year_range[0]) & 
                                             (df_exploded_genres['release_year'] <= year_range[1])]
-
-    filtered_df_countries = df_exploded_countries[(filtered_df_countries['release_year'] >= year_range[0]) &
-                                                  (filtered_df_countries['release_year'] <= year_range[1])]
+    
+    filtered_df_countries = df_exploded_countries[(df_exploded_countries['release_year'] >= year_range[0]) & 
+                                                  (df_exploded_countries['release_year'] <= year_range[1])]
 
     # Count the frequency of genres
     filtered_genre_counts = filtered_df_genres['genres_list'].value_counts().reset_index()
@@ -380,22 +354,22 @@ def charts(year_range):
     treemap_fig = px.treemap(filtered_genre_counts, path=['genre'], values='count',
                              title=f"Market Share of Movie Genres from {year_range[0]} to {year_range[1]}",
                              color='genre', color_discrete_sequence=custom_colors)
-
+    
     # Count the frequency of production countries
     filtered_country_counts = filtered_df_countries['countries_list'].value_counts().reset_index()
     filtered_country_counts.columns = ['country', 'count']
-
+    
     # Create the donut chart (only use top 10 countries for concision)
     top_countries = filtered_country_counts.head(10)
-
+    
     total_count = filtered_country_counts['count'].sum()
-
-    donut_fig = go.Figure(data=[go.Pie(labels=top_countries['country'], values=top_countries['count'],
+    
+    donut_fig = go.Figure(data=[go.Pie(labels=top_countries['country'], values=top_countries['count'], 
                                        hole=.4, hoverinfo="label+percent+name")])
 
     donut_fig.update_traces(direction='clockwise', pull=[0.1]*len(top_countries),
                             rotation=90, showlegend=True)
-
+    
     donut_fig.update_layout(
         title_text=f"Diversity of Production Countries from {year_range[0]} to {year_range[1]}",
         annotations=[dict(text=f'Total: {total_count}', x=0.5, y=0.5, font_size=20, showarrow=False)],
@@ -404,6 +378,9 @@ def charts(year_range):
 
     return treemap_fig, donut_fig
 
+
 # Run the Dash app
 if __name__ == '__main__':
     app.run_server(debug=True)
+
+
