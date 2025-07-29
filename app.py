@@ -66,6 +66,9 @@ else:
 
 
 # Process the data based on your previous filtering and processing logic
+# **修正：确保 historical_top_8 在全局范围被定义**
+historical_top_8 = pd.DataFrame() # 初始化为空DataFrame
+
 if not df.empty:
     df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
 
@@ -74,6 +77,12 @@ if not df.empty:
 
     # Sort the filtered movies by revenue in descending order and select the top 8
     top_8_movies = filtered_movies.sort_values(by='revenue', ascending=False).head(8)
+    
+    # 定义 historical_top_8（如果数据可用）
+    # 假设 historical_top_8 也是从 df 派生，这里只是一个示例
+    # 请根据你实际的历史数据逻辑来定义 historical_top_8
+    # 比如：取 df 中总收入最高的8部电影
+    historical_top_8 = df.sort_values(by='revenue', ascending=False).head(8)
 
     # Extract relevant columns for displaying ratings
     movies = top_8_movies[['title_x', 'vote_average', 'vote_count']].copy()
@@ -201,7 +210,7 @@ app.layout = html.Div([
                 dcc.Dropdown(
                     id='time-series-dropdown',
                     options=[{'label': col, 'value': col} for col in df_trend.columns[1:]] if not df_trend.empty else [],
-                    value=[df_trend.columns[1], df_trend.columns[2]] if not df_trend.empty else [],
+                    value=[df_trend.columns[1], df_trend.columns[2]] if not df_trend.empty and len(df_trend.columns) > 2 else [],
                     multi=True,
                     style={'color': 'black'}
                 ),
@@ -214,7 +223,7 @@ app.layout = html.Div([
                 dcc.Dropdown(
                     id='geo-map-dropdown',
                     options=[{'label': col, 'value': col} for col in df_geo_cleaned.columns[1:]] if not df_geo_cleaned.empty else [],
-                    value=df_geo_cleaned.columns[1] if not df_geo_cleaned.empty else None,
+                    value=df_geo_cleaned.columns[1] if not df_geo_cleaned.empty and len(df_geo_cleaned.columns) > 1 else None,
                     multi=False,
                     style={'color': 'black'}
                 ),
@@ -234,13 +243,13 @@ app.layout = html.Div([
 
             # Slider to select the year range
             dcc.RangeSlider(
-                int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].min()) else 1900,
-                int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].max()) else 2024,
+                int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
+                int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024,
                 step=1,
-                marks={str(year): str(year) for year in range(int(df['release_year'].min() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].min()) else 1900),
-                                                           int(df['release_year'].max() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].max()) else 2024)+1, 5)},
-                value=[int(df['release_year'].min() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].min()) else 1900),
-                       int(df['release_year'].max() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].max()) else 2024)],
+                marks={str(year): str(year) for year in range(int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
+                                                           int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024)+1, 5)},
+                value=[int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
+                       int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024],
                 id='year-slider'
             )
         ], style={'flex': '1', 'padding': '10px'}),
@@ -256,9 +265,15 @@ app.layout = html.Div([
     Input('filter-type', 'value')
 )
 def update_graph(selected_filter):
-    # 如果数据为空，返回一个空图表
+    # 修正：确保所有引用的全局变量都已定义，并且进行空值检查
+    # 这里需要确保 historical_top_8 在全局作用域已经初始化
+    global historical_top_8 # 声明使用全局变量
+    if historical_top_8.empty and not df.empty: # 如果 historical_top_8 还是空的，尝试重新创建它
+        historical_top_8 = df.sort_values(by='revenue', ascending=False).head(8)
+
+
     if df.empty or top_8_movies.empty or historical_top_8.empty or top_8_actors.empty:
-        return go.Figure().update_layout(title="Data not loaded. Please check CSV files.")
+        return go.Figure().update_layout(title="Data not loaded or insufficient for this chart.")
 
     # Check user selection and sort data accordingly
     if selected_filter == 'on_screen':
@@ -269,7 +284,7 @@ def update_graph(selected_filter):
         left_margin = 180
 
         # Create the bar chart - 修正了 y 轴的列名
-        fig = px.bar(data, x='revenue', y='title', orientation='h', title=title)
+        fig = px.bar(data, x='revenue', y='title_x', orientation='h', title=title) # 确保 y 轴是 title_x
 
     elif selected_filter == 'historical':
         # Sort for historical top 8 movies by revenue
@@ -292,7 +307,7 @@ def update_graph(selected_filter):
                      color='revenue', color_continuous_scale='Blues')
 
         # Adjust x-axis range
-        if not data.empty:
+        if not data.empty and 'revenue' in data.columns:
             fig.update_xaxes(range=[min(data['revenue']) * 0.9, max(data['revenue']) * 1.05])
 
     # Apply common layout settings
@@ -321,7 +336,7 @@ def update_graph(selected_filter):
 )
 def update_time_series(selected_movies):
     if df_trend.empty or not selected_movies:
-        return go.Figure().update_layout(title="Time Series Data not available.")
+        return go.Figure().update_layout(title="Time Series Data not available or no movies selected.")
 
     # Time Series Plot
     try:
@@ -330,8 +345,17 @@ def update_time_series(selected_movies):
         if not valid_selected_movies:
             return go.Figure().update_layout(title="No valid movies selected for Time Series.")
 
+        # Ensure 'Months' column is always used as x-axis
+        if 'Months' not in df_trend.columns:
+            return go.Figure().update_layout(title="Error: 'Months' column not found in trend data.")
+
         df_melted_trend = df_trend.melt(id_vars='Months', value_vars=valid_selected_movies,
                                          var_name='Movie', value_name='Popularity')
+        
+        # 修正：处理 melt 后可能为空的情况
+        if df_melted_trend.empty:
+            return go.Figure().update_layout(title="No data to display for selected time series movies.")
+
         time_series_fig = px.line(
             df_melted_trend,
             x='Months',
@@ -361,7 +385,7 @@ def update_time_series(selected_movies):
 )
 def update_geo_map(selected_movie):
     if df_geo_cleaned.empty or not selected_movie:
-        return go.Figure().update_layout(title="Geo Map Data not available.")
+        return go.Figure().update_layout(title="Geo Map Data not available or no movie selected.")
 
     # Geo Map Plot
     try:
@@ -370,6 +394,10 @@ def update_geo_map(selected_movie):
 
         df_melted_geo = df_geo_cleaned.melt(id_vars='Countries', value_vars=[selected_movie],
                                             var_name='Movie', value_name='Popularity')
+        
+        # 修正：处理 melt 后可能为空的情况
+        if df_melted_geo.empty:
+            return go.Figure().update_layout(title="No data to display for selected geo map movie.")
 
         geo_map_fig = px.choropleth(
             df_melted_geo,
@@ -405,46 +433,59 @@ def update_geo_map(selected_movie):
     [Input('year-slider', 'value')]
 )
 def charts(year_range):
+    # **修正：确保 filtered_df_genres 和 filtered_df_countries 始终被初始化**
+    filtered_df_genres = pd.DataFrame()
+    filtered_df_countries = pd.DataFrame()
+
     if df_exploded_genres.empty or df_exploded_countries.empty:
-        return go.Figure().update_layout(title="Genre/Country Data not available."), \
-               go.Figure().update_layout(title="Genre/Country Data not available.")
+        return go.Figure().update_layout(title="Genre/Country Data not available or insufficient for this chart."), \
+               go.Figure().update_layout(title="Genre/Country Data not available or insufficient for this chart.")
 
     # Filter the dataframe
-    filtered_df_genres = df_exploded_genres[(df_exploded_genres['release_year'] >= year_range[0]) &
-                                            (df_exploded_genres['release_year'] <= year_range[1])]
+    if not df_exploded_genres.empty and 'release_year' in df_exploded_genres.columns:
+        filtered_df_genres = df_exploded_genres[(df_exploded_genres['release_year'] >= year_range[0]) &
+                                                (df_exploded_genres['release_year'] <= year_range[1])]
 
-    filtered_df_countries = df_exploded_countries[(filtered_df_countries['release_year'] >= year_range[0]) &
-                                                  (filtered_df_countries['release_year'] <= year_range[1])]
+    if not df_exploded_countries.empty and 'release_year' in df_exploded_countries.columns:
+        filtered_df_countries = df_exploded_countries[(filtered_df_countries['release_year'] >= year_range[0]) &
+                                                      (filtered_df_countries['release_year'] <= year_range[1])]
 
-    # Count the frequency of genres
-    filtered_genre_counts = filtered_df_genres['genres_list'].value_counts().reset_index()
-    filtered_genre_counts.columns = ['genre', 'count']
+    # 检查过滤后的数据是否为空
+    if filtered_df_genres.empty:
+        treemap_fig = go.Figure().update_layout(title="No genre data for selected year range.")
+    else:
+        # Count the frequency of genres
+        filtered_genre_counts = filtered_df_genres['genres_list'].value_counts().reset_index()
+        filtered_genre_counts.columns = ['genre', 'count']
 
-    # Create the treemap
-    treemap_fig = px.treemap(filtered_genre_counts, path=['genre'], values='count',
-                             title=f"Market Share of Movie Genres from {year_range[0]} to {year_range[1]}",
-                             color='genre', color_discrete_sequence=custom_colors)
+        # Create the treemap
+        treemap_fig = px.treemap(filtered_genre_counts, path=['genre'], values='count',
+                                 title=f"Market Share of Movie Genres from {year_range[0]} to {year_range[1]}",
+                                 color='genre', color_discrete_sequence=custom_colors)
 
-    # Count the frequency of production countries
-    filtered_country_counts = filtered_df_countries['countries_list'].value_counts().reset_index()
-    filtered_country_counts.columns = ['country', 'count']
+    if filtered_df_countries.empty:
+        donut_fig = go.Figure().update_layout(title="No country data for selected year range.")
+    else:
+        # Count the frequency of production countries
+        filtered_country_counts = filtered_df_countries['countries_list'].value_counts().reset_index()
+        filtered_country_counts.columns = ['country', 'count']
 
-    # Create the donut chart (only use top 10 countries for concision)
-    top_countries = filtered_country_counts.head(10)
+        # Create the donut chart (only use top 10 countries for concision)
+        top_countries = filtered_country_counts.head(10)
 
-    total_count = filtered_country_counts['count'].sum()
+        total_count = filtered_country_counts['count'].sum()
 
-    donut_fig = go.Figure(data=[go.Pie(labels=top_countries['country'], values=top_countries['count'],
-                                       hole=.4, hoverinfo="label+percent+name")])
+        donut_fig = go.Figure(data=[go.Pie(labels=top_countries['country'], values=top_countries['count'],
+                                           hole=.4, hoverinfo="label+percent+name")])
 
-    donut_fig.update_traces(direction='clockwise', pull=[0.1]*len(top_countries),
-                            rotation=90, showlegend=True)
+        donut_fig.update_traces(direction='clockwise', pull=[0.1]*len(top_countries),
+                                rotation=90, showlegend=True)
 
-    donut_fig.update_layout(
-        title_text=f"Diversity of Production Countries from {year_range[0]} to {year_range[1]}",
-        annotations=[dict(text=f'Total: {total_count}', x=0.5, y=0.5, font_size=20, showarrow=False)],
-        height=400, legend=dict(x=1, y=0.5), showlegend=True
-    )
+        donut_fig.update_layout(
+            title_text=f"Diversity of Production Countries from {year_range[0]} to {year_range[1]}",
+            annotations=[dict(text=f'Total: {total_count}', x=0.5, y=0.5, font_size=20, showarrow=False)],
+            height=400, legend=dict(x=1, y=0.5), showlegend=True
+        )
 
     return treemap_fig, donut_fig
 
