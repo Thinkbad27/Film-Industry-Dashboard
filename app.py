@@ -243,11 +243,15 @@ app.layout = html.Div([
 
             # Slider to select the year range
             dcc.RangeSlider(
-                int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
-                int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024,
+                min=int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
+                max=int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024,
                 step=1,
-                marks={str(year): str(year) for year in range(int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
-                                                           int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024)+1, 5)},
+                # 修正：将 '5' 放到 range 函数的括号内部
+                marks={str(year): str(year) for year in range(
+                    int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
+                    int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024 + 1,
+                    5
+                )},
                 value=[int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].min()) else 1900,
                        int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and not df['release_year'].empty and pd.notna(df['release_year'].max()) else 2024],
                 id='year-slider'
@@ -409,7 +413,6 @@ def update_geo_map(selected_movie):
             title=f'{selected_movie} Popularity by Country'
         )
 
-        # Update layout for the geo map
         geo_map_fig.update_geos(
             showland=True,
             landcolor='lightgray',
