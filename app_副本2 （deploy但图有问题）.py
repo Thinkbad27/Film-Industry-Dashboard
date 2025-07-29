@@ -8,80 +8,48 @@ import plotly.graph_objects as go
 import ast
 import dash_bootstrap_components as dbc
 
-# --- 数据加载和预处理 ---
-# 确保这些 CSV 文件与 app.py 在同一个目录
-try:
-    df = pd.read_csv('df_cleaned.csv')
-    df_geo_cleaned = pd.read_csv('cleaned_geomap.csv')
-    df_trend = pd.read_csv('multiTimeline.csv')
-    print("All CSV files loaded successfully.")
-except FileNotFoundError as e:
-    print(f"Error loading CSV file: {e}. Please ensure CSVs are in the root directory.")
-    # 如果文件没找到，这里可以创建空的DataFrame来避免后续代码报错
-    df = pd.DataFrame()
-    df_geo_cleaned = pd.DataFrame()
-    df_trend = pd.DataFrame()
-
+# --- Data Loading and Preprocessing ---
+df = pd.read_csv('df_cleaned.csv')
+df_geo_cleaned = pd.read_csv('cleaned_geomap.csv')
+df_trend = pd.read_csv('multiTimeline.csv')
 
 # Extracting relevant columns for analysis
 # FIX: Addressing SettingWithCopyWarning by explicitly creating a copy
-actor_revenue_df = df[['cast', 'revenue']].copy() 
+actor_revenue_df = df[['cast', 'revenue']].copy() # <--- Added .copy() here
 
 # Define a function to extract actor names and create a new column
 def get_main_actors(cast_data):
-    # Parse the JSON-like string to extract main actors (top 3)
     try:
-        # Added check for NaN and empty strings before literal_eval
-        if pd.isna(cast_data) or cast_data.strip() == '':
-            return []
         cast_list = ast.literal_eval(cast_data)
         main_actors = [member['name'] for member in cast_list[:3]]
         return main_actors
-    except (ValueError, SyntaxError):
-        # print(f"Warning: Could not parse cast data: {cast_data}") # 可以取消注释用于调试
+    except (ValueError, SyntaxError): # Added more specific exceptions for robustness
         return []
 
 # Create a new column for main actors
-if not actor_revenue_df.empty and 'cast' in actor_revenue_df.columns:
-    actor_revenue_df['main_actors'] = actor_revenue_df['cast'].apply(get_main_actors)
-else:
-    actor_revenue_df['main_actors'] = [[]] * len(actor_revenue_df) # 添加空列以防报错
+actor_revenue_df['main_actors'] = actor_revenue_df['cast'].apply(get_main_actors)
 
 # Explode the main_actors list to have one actor per row
-# 仅在 main_actors 列存在且非空时执行 explode
-if 'main_actors' in actor_revenue_df.columns and not actor_revenue_df['main_actors'].empty:
-    actor_revenue_exploded = actor_revenue_df.explode('main_actors')
-else:
-    actor_revenue_exploded = pd.DataFrame(columns=actor_revenue_df.columns.tolist() + ['main_actors'])
-
+actor_revenue_exploded = actor_revenue_df.explode('main_actors')
 
 # Group by actor and sum their revenue
-if not actor_revenue_exploded.empty:
-    actor_cumulative_revenue = actor_revenue_exploded.groupby('main_actors')['revenue'].sum().reset_index()
-    # Sort actors by cumulative revenue and select the top 8
-    top_8_actors = actor_cumulative_revenue.sort_values(by='revenue', ascending=False).head(8)
-else:
-    actor_cumulative_revenue = pd.DataFrame(columns=['main_actors', 'revenue'])
-    top_8_actors = pd.DataFrame(columns=['main_actors', 'revenue'])
+actor_cumulative_revenue = actor_revenue_exploded.groupby('main_actors')['revenue'].sum().reset_index()
 
+# Sort actors by cumulative revenue and select the top 8
+top_8_actors = actor_cumulative_revenue.sort_values(by='revenue', ascending=False).head(8)
 
 # Process the data based on your previous filtering and processing logic
-if not df.empty:
-    df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
+df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
 
-    # Filter for movies released between 2016-06-01 and 2016-09-30
-    filtered_movies = df[(df['release_date'] >= '2016-06-01') & (df['release_date'] <= '2016-09-30')]
+# Filter for movies released between 2016-06-01 and 2016-09-30
+filtered_movies = df[(df['release_date'] >= '2016-06-01') & (df['release_date'] <= '2016-09-30')]
 
-    # Sort the filtered movies by revenue in descending order and select the top 8
-    top_8_movies = filtered_movies.sort_values(by='revenue', ascending=False).head(8)
+# Sort the filtered movies by revenue in descending order and select the top 8
+top_8_movies = filtered_movies.sort_values(by='revenue', ascending=False).head(8)
 
-    # Extract relevant columns for displaying ratings
-    movies = top_8_movies[['title_x', 'vote_average', 'vote_count']].copy()
-    movies.columns = ['title', 'vote_average', 'vote_count']  # Rename for easier use
-else:
-    top_8_movies = pd.DataFrame()
-    movies = pd.DataFrame(columns=['title', 'vote_average', 'vote_count'])
-
+# Extract relevant columns for displaying ratings
+movies = top_8_movies[['title_x', 'vote_average', 'vote_count']].copy()
+movies.columns = ['title', 'vote_average', 'vote_count']  # Rename for easier use
 
 # Helper function: generate star ratings based on the vote_average
 def generate_stars(vote_average):
@@ -101,62 +69,52 @@ def format_vote_count(vote_count):
     return str(vote_count)
 
 # Process the genres and production countries, and extract relevant data
-if not df.empty and 'genres' in df.columns and 'production_countries' in df.columns:
-    df['genres_list'] = df['genres'].apply(lambda x: [genre['name'] for genre in ast.literal_eval(x)] if pd.notna(x) and x.strip() != '' else [])
-    df['countries_list'] = df['production_countries'].apply(lambda x: [country['name'] for country in ast.literal_eval(x)] if pd.notna(x) and x.strip() != '' else [])
-else: # Handle case where df is empty or columns are missing
-    df['genres_list'] = [[]] * len(df)
-    df['countries_list'] = [[]] * len(df)
+df['genres_list'] = df['genres'].apply(lambda x: [genre['name'] for genre in ast.literal_eval(x)] if pd.notna(x) else [])
+df['countries_list'] = df['production_countries'].apply(lambda x: [country['name'] for country in ast.literal_eval(x)] if pd.notna(x) else [])
 
 
 # Extract release year & drop rows with missing values
-if not df.empty and 'release_date' in df.columns:
-    df['release_year'] = pd.to_datetime(df['release_date'], errors='coerce').dt.year
-    df = df.dropna(subset=['release_year'])
-else:
-    df['release_year'] = pd.Series(dtype='float64')
-
+df['release_year'] = pd.to_datetime(df['release_date'], errors='coerce').dt.year
+df = df.dropna(subset=['release_year'])
 
 # Explode the genres and countries into individual rows
-# 仅在 'genres_list' 和 'countries_list' 列存在且非空时执行 explode
-if 'genres_list' in df.columns and not df['genres_list'].empty:
-    df_exploded_genres = df.explode('genres_list')
-else:
-    df_exploded_genres = pd.DataFrame(columns=df.columns.tolist() + ['genres_list'])
+df_exploded_genres = df.explode('genres_list')
+df_exploded_countries = df.explode('countries_list')
 
-if 'countries_list' in df.columns and not df['countries_list'].empty:
-    df_exploded_countries = df.explode('countries_list')
-else:
-    df_exploded_countries = pd.DataFrame(columns=df.columns.tolist() + ['countries_list'])
-
-
-# Initialize Dash app
+# --- Dash App Initialization ---
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SUPERHERO])
 
 custom_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
                  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
-# --- Dash App Layout (回到原始单页布局) ---
+# --- Dash App Layout ---
 app.layout = html.Div([
     # Navigation Bar
     html.Div([
         html.H3("Film Industry Analysis Dashboard", style={'text-align': 'center'}),
         html.Nav([
             html.Ul([
-                # 即使现在是单页应用，链接也可以保留，但它们会刷新页面到根路径
                 html.Li(dcc.Link('Home', href='/'), style={'display': 'inline', 'margin': '0 10px'}),
-                html.Li(dcc.Link('Box Office', href='/'), style={'display': 'inline', 'margin': '0 10px'}),
-                html.Li(dcc.Link('Score', href='/'), style={'display': 'inline', 'margin': '0 10px'}),
-                html.Li(dcc.Link('Popularity', href='/'), style={'display': 'inline', 'margin': '0 10px'}),
-                html.Li(dcc.Link('Genre', href='/'), style={'display': 'inline', 'margin': '0 10px'}),
-                html.Li(dcc.Link('Language', href='/'), style={'display': 'inline', 'margin': '0 10px'})
+                html.Li(dcc.Link('Box Office', href='/boxoffice'), style={'display': 'inline', 'margin': '0 10px'}),
+                html.Li(dcc.Link('Score', href='/score'), style={'display': 'inline', 'margin': '0 10px'}),
+                html.Li(dcc.Link('Popularity', href='/popularity'), style={'display': 'inline', 'margin': '0 10px'}),
+                html.Li(dcc.Link('Genre', href='/genre'), style={'display': 'inline', 'margin': '0 10px'}),
+                html.Li(dcc.Link('Language', href='/language'), style={'display': 'inline', 'margin': '0 10px'})
             ], style={'list-style-type': 'none', 'padding': '0'}),
         ], style={'text-align': 'center', 'background-color': 'rgba(0, 0, 0, 0)'}),
     ], style={'padding': '10px', 'border-radius': '5px'}),
 
-    # Main Content
+    # Main Content - Using dcc.Location for multi-page routing
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content') # Content will be loaded here based on URL
+])
+
+# Define the content for each page (simplified for example)
+home_page_layout = html.Div([
+    html.H1("Welcome to the Film Industry Analysis Dashboard"),
+    html.P("Use the navigation bar to explore different aspects of the film industry."),
     html.Div([
-        # First Row: 1st Column with 2 Plots
+        # First Row: 1st Column with 2 Plots (from original app.layout)
         html.Div([
             html.H3("Movie Revenue"),
             dcc.RadioItems(
@@ -191,7 +149,7 @@ app.layout = html.Div([
             ])
         ], style={'flex': '1', 'padding': '10px'}),
 
-        # Second Column: 2nd Column with 2 Plots
+        # Second Column: 2nd Column with 2 Plots (from original app.layout)
         html.Div([
             html.H3("Movie Popularity"),
 
@@ -200,8 +158,8 @@ app.layout = html.Div([
                 html.Label("Select Movies for Time Series:"),
                 dcc.Dropdown(
                     id='time-series-dropdown',
-                    options=[{'label': col, 'value': col} for col in df_trend.columns[1:]] if not df_trend.empty else [],
-                    value=[df_trend.columns[1], df_trend.columns[2]] if not df_trend.empty else [],
+                    options=[{'label': col, 'value': col} for col in df_trend.columns[1:]],
+                    value=[df_trend.columns[1], df_trend.columns[2]],
                     multi=True,
                     style={'color': 'black'}
                 ),
@@ -213,8 +171,8 @@ app.layout = html.Div([
                 html.Label("Select Movie for Geo Map:"),
                 dcc.Dropdown(
                     id='geo-map-dropdown',
-                    options=[{'label': col, 'value': col} for col in df_geo_cleaned.columns[1:]] if not df_geo_cleaned.empty else [],
-                    value=df_geo_cleaned.columns[1] if not df_geo_cleaned.empty else None,
+                    options=[{'label': col, 'value': col} for col in df_geo_cleaned.columns[1:]],
+                    value=df_geo_cleaned.columns[1],
                     multi=False,
                     style={'color': 'black'}
                 ),
@@ -222,7 +180,7 @@ app.layout = html.Div([
             dcc.Graph(id='geo-map', style={'height': '400px', 'width': '100%'}),
         ], style={'flex': '1', 'padding': '10px'}),
 
-        # Third Column: 3rd Column with 2 Plots
+        # Third Column: 3rd Column with 2 Plots (from original app.layout)
         html.Div([
             html.H3("Film Industry Analysis"),
 
@@ -234,21 +192,35 @@ app.layout = html.Div([
 
             # Slider to select the year range
             dcc.RangeSlider(
-                int(df['release_year'].min()) if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].min()) else 1900,
-                int(df['release_year'].max()) if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].max()) else 2024,
+                int(df['release_year'].min()),
+                int(df['release_year'].max()),
                 step=1,
-                marks={str(year): str(year) for year in range(int(df['release_year'].min() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].min()) else 1900),
-                                                           int(df['release_year'].max() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].max()) else 2024)+1, 5)},
-                value=[int(df['release_year'].min() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].min()) else 1900),
-                       int(df['release_year'].max() if not df.empty and 'release_year' in df.columns and pd.notna(df['release_year'].max()) else 2024)],
+                marks={str(year): str(year) for year in range(int(df['release_year'].min()), int(df['release_year'].max())+1, 5)},
+                value=[int(df['release_year'].min()), int(df['release_year'].max())],
                 id='year-slider'
             )
         ], style={'flex': '1', 'padding': '10px'}),
-    ], style={'display': 'flex', 'flex-direction': 'row'}),
+    ], style={'display': 'flex', 'flex-direction': 'row'})
 ])
 
+# --- Callbacks ---
 
-# --- 回调函数 ---
+# Callback for multi-page routing
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    if pathname == '/boxoffice':
+        return html.Div("Box Office Content - TODO: Implement specific layout for Box Office")
+    elif pathname == '/score':
+        return html.Div("Score Content - TODO: Implement specific layout for Score")
+    elif pathname == '/popularity':
+        return html.Div("Popularity Content - TODO: Implement specific layout for Popularity")
+    elif pathname == '/genre':
+        return html.Div("Genre Content - TODO: Implement specific layout for Genre")
+    elif pathname == '/language':
+        return html.Div("Language Content - TODO: Implement specific layout for Language")
+    else: # Default to home page or main dashboard
+        return home_page_layout
 
 # Define callback function to update bar chart based on selected filter
 @app.callback(
@@ -256,10 +228,6 @@ app.layout = html.Div([
     Input('filter-type', 'value')
 )
 def update_graph(selected_filter):
-    # 如果数据为空，返回一个空图表
-    if df.empty or top_8_movies.empty or historical_top_8.empty or top_8_actors.empty:
-        return go.Figure().update_layout(title="Data not loaded. Please check CSV files.")
-
     # Check user selection and sort data accordingly
     if selected_filter == 'on_screen':
         # Sort movies by revenue for on-screen selection
@@ -268,8 +236,11 @@ def update_graph(selected_filter):
         width, height = 900, 400  # Set size for on-screen chart
         left_margin = 180
 
-        # Create the bar chart - 修正了 y 轴的列名
-        fig = px.bar(data, x='revenue', y='title', orientation='h', title=title)
+        # Create the bar chart
+        fig = px.bar(data, x='revenue', y='title', orientation='h', title=title) # Changed y='title_x' to 'title' as per line 69
+        # Changed y='title_x' to 'title' as per line 69
+        # Also ensure 'title' is the correct column name for plotting
+        # based on movies.columns = ['title', 'vote_average', 'vote_count']
 
     elif selected_filter == 'historical':
         # Sort for historical top 8 movies by revenue
@@ -292,8 +263,7 @@ def update_graph(selected_filter):
                      color='revenue', color_continuous_scale='Blues')
 
         # Adjust x-axis range
-        if not data.empty:
-            fig.update_xaxes(range=[min(data['revenue']) * 0.9, max(data['revenue']) * 1.05])
+        fig.update_xaxes(range=[min(data['revenue']) * 0.9, max(data['revenue']) * 1.05])
 
     # Apply common layout settings
     fig.update_layout(
@@ -320,17 +290,13 @@ def update_graph(selected_filter):
     Input('time-series-dropdown', 'value')
 )
 def update_time_series(selected_movies):
-    if df_trend.empty or not selected_movies:
-        return go.Figure().update_layout(title="Time Series Data not available.")
+    # Check if any movies are selected
+    if not selected_movies:
+        return {}  # Return empty figure if no movies are selected
 
     # Time Series Plot
     try:
-        # Filter selected_movies to only include columns that actually exist in df_trend
-        valid_selected_movies = [col for col in selected_movies if col in df_trend.columns]
-        if not valid_selected_movies:
-            return go.Figure().update_layout(title="No valid movies selected for Time Series.")
-
-        df_melted_trend = df_trend.melt(id_vars='Months', value_vars=valid_selected_movies,
+        df_melted_trend = df_trend.melt(id_vars='Months', value_vars=selected_movies,
                                          var_name='Movie', value_name='Popularity')
         time_series_fig = px.line(
             df_melted_trend,
@@ -350,7 +316,7 @@ def update_time_series(selected_movies):
         )
     except Exception as e:
         print(f"Error generating time series plot: {e}")
-        time_series_fig = go.Figure().update_layout(title=f"Error loading Time Series: {e}")
+        time_series_fig = {}
 
     return time_series_fig
 
@@ -360,14 +326,8 @@ def update_time_series(selected_movies):
     Input('geo-map-dropdown', 'value')
 )
 def update_geo_map(selected_movie):
-    if df_geo_cleaned.empty or not selected_movie:
-        return go.Figure().update_layout(title="Geo Map Data not available.")
-
     # Geo Map Plot
     try:
-        if selected_movie not in df_geo_cleaned.columns:
-             return go.Figure().update_layout(title=f"Movie '{selected_movie}' not found in Geo Map data.")
-
         df_melted_geo = df_geo_cleaned.melt(id_vars='Countries', value_vars=[selected_movie],
                                             var_name='Movie', value_name='Popularity')
 
@@ -394,7 +354,7 @@ def update_geo_map(selected_movie):
         )
     except Exception as e:
         print(f"Error generating geo map plot: {e}")
-        geo_map_fig = go.Figure().update_layout(title=f"Error loading Geo Map: {e}")
+        geo_map_fig = {}
 
     return geo_map_fig
 
@@ -405,10 +365,6 @@ def update_geo_map(selected_movie):
     [Input('year-slider', 'value')]
 )
 def charts(year_range):
-    if df_exploded_genres.empty or df_exploded_countries.empty:
-        return go.Figure().update_layout(title="Genre/Country Data not available."), \
-               go.Figure().update_layout(title="Genre/Country Data not available.")
-
     # Filter the dataframe
     filtered_df_genres = df_exploded_genres[(df_exploded_genres['release_year'] >= year_range[0]) &
                                             (df_exploded_genres['release_year'] <= year_range[1])]
@@ -448,10 +404,8 @@ def charts(year_range):
 
     return treemap_fig, donut_fig
 
-# --- 供 Gunicorn 调用的 WSGI 应用入口 ---
-# 确保这个名字是 'server'，因为它在 Procfile 中被引用
 server = app.server
 
-# Run the Dash app (仅用于本地调试)
+# Run the Dash app
 if __name__ == '__main__':
     app.run_server(debug=True)
